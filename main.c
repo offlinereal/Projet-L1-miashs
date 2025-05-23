@@ -1,20 +1,21 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <curl/curl.h>
+#include <curl/curl.h> // Bibliothèque pour faire des requêtes HTTP
 
 #define MAX_PROMPT_SIZE 1000
 #define MAX_INPUT_SIZE 100
 
-// Structure pour gérer la réponse de l'API
+// Structure pour stocker la réponse de l'API
 struct string {
     char *ptr;
     size_t len;
 };
 
+// Initialisation de la structure de réponse
 void init_string(struct string *s) {
     s->len = 0;
-    s->ptr = malloc(1);
+    s->ptr = malloc(1); // Allocation initiale
     if (s->ptr == NULL) {
         fprintf(stderr, "Erreur mémoire\n");
         exit(EXIT_FAILURE);
@@ -22,30 +23,34 @@ void init_string(struct string *s) {
     s->ptr[0] = '\0';
 }
 
+// Fonction appelée automatiquement à chaque portion de réponse reçue
 size_t writefunc(void *ptr, size_t size, size_t nmemb, struct string *s) {
     size_t new_len = s->len + size * nmemb;
-    s->ptr = realloc(s->ptr, new_len + 1);
+    s->ptr = realloc(s->ptr, new_len + 1); // Réallocation mémoire pour stocker plus de texte
     if (s->ptr == NULL) {
         fprintf(stderr, "Erreur realloc\n");
         exit(EXIT_FAILURE);
     }
-    memcpy(s->ptr + s->len, ptr, size * nmemb);
+    memcpy(s->ptr + s->len, ptr, size * nmemb); // On copie la nouvelle portion à la suite
     s->ptr[new_len] = '\0';
     s->len = new_len;
     return size * nmemb;
 }
 
 int main() {
-    system("chcp 65001 >nul");
+    system("chcp 65001 >nul"); // Active l'encodage UTF-8 pour l'affichage
     printf("Début du programme\n");
-fflush(stdout);
+    fflush(stdout);
+
+    // Déclarations des variables pour les infos à collecter
     char surface[MAX_INPUT_SIZE], nb_pieces[MAX_INPUT_SIZE], localisation[MAX_INPUT_SIZE];
     char type_bien[MAX_INPUT_SIZE], annee[MAX_INPUT_SIZE], etat[MAX_INPUT_SIZE];
     char exterieur[MAX_INPUT_SIZE], stationnement[MAX_INPUT_SIZE], ascenseur[MAX_INPUT_SIZE];
 
+    // Début du prompt à envoyer à l’API
     char prompt[MAX_PROMPT_SIZE] = "Peux-tu estimer le prix d’un bien immobilier";
 
-    // Saisie utilisateur
+    // Demande de saisie utilisateur
     printf("Type de bien (appartement/maison) : ");
     scanf(" %[^\n]", type_bien);
     printf("Surface (en m²) : ");
@@ -65,7 +70,7 @@ fflush(stdout);
     printf("Presence d’un ascenseur (oui/non) : ");
     scanf(" %[^\n]", ascenseur);
 
-    // Construction du prompt
+    // Construction du prompt selon les champs remplis
     if (strcmp(type_bien, "-") != 0) {
         strcat(prompt, " de type ");
         strcat(prompt, type_bien);
@@ -105,18 +110,20 @@ fflush(stdout);
         strcat(prompt, ascenseur);
     }
 
-    strcat(prompt, " ?");
+    strcat(prompt, " ?"); // Fin du prompt
 
+    // Affichage du prompt généré pour vérification
     printf("\n---\nPrompt genere :\n%s\n", prompt);
     printf("---\n");
 
-    // Envoi à l’API
+    // Préparation de la requête vers l'API OpenAI
     CURL *curl;
     CURLcode res;
     struct string response;
 
-    const char *api_key = "sk-ta_clé_api";
+    const char *api_key = "sk-ta_clé_api"; // Clé d'API OpenAI
 
+    // Création du JSON à envoyer
     char data[2048];
     snprintf(data, sizeof(data),
         "{"
@@ -127,7 +134,7 @@ fflush(stdout);
         "]"
         "}", prompt);
 
-    init_string(&response);
+    init_string(&response); // Initialisation de la réponse
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
     curl = curl_easy_init();
@@ -137,32 +144,38 @@ fflush(stdout);
         char auth_header[256];
         snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
 
+        // Définition des headers
         headers = curl_slist_append(headers, "Content-Type: application/json");
         headers = curl_slist_append(headers, auth_header);
 
+        // Configuration de la requête HTTP
         curl_easy_setopt(curl, CURLOPT_URL, "https://api.openai.com/v1/chat/completions");
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data); // Données JSON à envoyer
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc); // Fonction pour recevoir la réponse
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); // Désactive la vérification SSL (pas recommandé)
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        res = curl_easy_perform(curl);
 
+        res = curl_easy_perform(curl); // Envoi de la requête
+
+        // Vérification du résultat
         if (res != CURLE_OK) 
             fprintf(stderr, "Erreur : %s\n", curl_easy_strerror(res));
         else {
+            // Affichage de la réponse de l'API
             printf("\n\033[1;34m═══════════════════════════════════════════════════════\033[0m\n");
             printf("\033[1;32m ESTIMATION IMMOBILIÈRE POUR VOTRE BIEN :\033[0m\n\n");
-            printf("%s\n", response.ptr); // <- ou response.ptr si tu veux tout le JSON
+            printf("%s\n", response.ptr);
             printf("\n\033[1;34m═══════════════════════════════════════════════════════\033[0m\n");
-             } 
+        }
 
+        // Libération des ressources
         curl_easy_cleanup(curl);
         curl_slist_free_all(headers);
     }
 
-    free(response.ptr);
-    curl_global_cleanup();
+    free(response.ptr); // Libération mémoire
+    curl_global_cleanup(); // Nettoyage global
     return 0;
 }
